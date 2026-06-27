@@ -109,7 +109,15 @@
     .btn-ghost { background:transparent; color:var(--text-secondary); }
     .btn-ghost:hover { color:var(--text-primary); background:var(--bg-elevated); }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .hidden { display:none !important; }
     .cache-tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-left:6px; }
+    .mode-chip.live { border-color:rgba(74,222,128,.35); color:var(--positive); }
+    .mode-chip.demo { border-color:rgba(154,154,168,.35); }
+    .banner {
+      margin-bottom:18px; padding:12px 16px; border-radius:12px; font-size:13px;
+      background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.22); color:#cbb8f0;
+    }
+    .banner.warn { background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.25); color:#fcd34d; }
 
     /* hero */
     .hero {
@@ -213,8 +221,10 @@
         <div class="row">
           <div class="avatar" id="id-avatar">D</div>
           <div>
-            <div class="label">Workspace owner</div>
-            <div class="uid mono" id="id-uid">demo-user-1</div>
+            <div class="label">Workspace</div>
+            <div class="uid" id="id-label">—</div>
+            <div class="label" style="margin-top:8px">Acting as</div>
+            <div class="uid mono" id="id-uid">—</div>
           </div>
         </div>
         <div class="as-me-tag">
@@ -245,12 +255,16 @@
           <div class="sub" id="run-meta">Loading…</div>
         </div>
         <div class="topbar-right">
-          <div class="chip">
-            <span class="dot" style="background:var(--positive)"></span>
-            Acting as you
+          <div class="chip mode-chip" id="mode-chip">
+            <span class="dot" id="mode-dot" style="background:var(--text-muted)"></span>
+            <span id="mode-text">Loading…</span>
           </div>
-          <button class="btn btn-ghost" id="reset-btn" title="Restore golden demo cache">
+          <button class="btn btn-ghost hidden" id="reset-btn" title="Restore golden demo cache">
             Reset demo
+          </button>
+          <button class="btn btn-accent hidden" id="live-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg>
+            Run live audit
           </button>
           <button class="btn btn-accent" id="run-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/><path d="M21 3v6h-6"/></svg>
@@ -258,6 +272,7 @@
           </button>
         </div>
       </div>
+      <div class="banner hidden" id="live-banner"></div>
 
       <!-- HERO: the ingestion-tax ledger -->
       <section class="hero">
@@ -312,7 +327,37 @@
     const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
       ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
+    let CONFIG = null;
     let STATE = { findings:[], before:{doc_count:0,ingestible_tokens:0}, avg:0, activeFilter:"all", auditSource:"" };
+
+    function applyConfig(cfg){
+      CONFIG = cfg;
+      const label = cfg.workspace_label || cfg.user_id;
+      document.getElementById("id-label").textContent = label;
+      document.getElementById("id-uid").textContent = cfg.user_id;
+      document.getElementById("id-avatar").textContent = (label[0] || "U").toUpperCase();
+      const live = cfg.effective_mode === "live";
+      const chip = document.getElementById("mode-chip");
+      const dot = document.getElementById("mode-dot");
+      const text = document.getElementById("mode-text");
+      chip.classList.toggle("live", live);
+      chip.classList.toggle("demo", !live);
+      dot.style.background = live ? "var(--positive)" : "var(--text-muted)";
+      text.textContent = live ? "Live workspace" : "Demo data";
+      document.getElementById("reset-btn").classList.toggle("hidden", !cfg.can_reset_demo);
+      document.getElementById("live-btn").classList.toggle("hidden", !cfg.can_run_live_audit);
+      const banner = document.getElementById("live-banner");
+      if(live && cfg.missing_for_live?.length){
+        banner.classList.remove("hidden");
+        banner.classList.add("warn");
+        banner.textContent = "Live mode requested but missing: " + cfg.missing_for_live.join(", ");
+      } else if(live){
+        banner.classList.remove("hidden", "warn");
+        banner.textContent = "Connected for live audit — ingest runs against your Scalekit workspace as " + cfg.user_id + ".";
+      } else {
+        banner.classList.add("hidden");
+      }
+    }
 
     function applyAudit(d, source){
       STATE.findings = d.findings.map(f=>({...f, pass:f.pass||f.pass_name}));
@@ -320,7 +365,12 @@
       STATE.avg = STATE.before.doc_count ? STATE.before.ingestible_tokens/STATE.before.doc_count : 0;
       STATE.auditSource = source;
       const when = d.generated_at ? new Date(d.generated_at).toLocaleString() : "unknown";
-      const srcLabel = { cache:"pre-cached", live:"live run", fallback:"offline fallback" }[source] || source;
+      const srcLabel = {
+        cache: CONFIG?.effective_mode === "live" ? "cached live" : "pre-cached",
+        live: "live workspace",
+        demo: "demo snapshot",
+        fallback: "offline fallback",
+      }[source] || source;
       document.getElementById("run-meta").innerHTML =
         `${STATE.findings.length} findings · baseline ${fmt(STATE.before.ingestible_tokens)} tokens across ${STATE.before.doc_count} docs · audited ${when}` +
         `<span class="cache-tag">${srcLabel}</span>`;
@@ -458,12 +508,59 @@
       f.fixed = false; delete f._mode; render();
     }
 
+    async function fetchAudit(){
+      const r = await fetch("/audit");
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        throw new Error(err.detail || ("audit "+r.status));
+      }
+      return {
+        data: await r.json(),
+        source: r.headers.get("X-Custodian-Audit-Source") || "cache",
+        needsLive: r.headers.get("X-Custodian-Needs-Live-Run") === "true",
+      };
+    }
+
+    async function loadConfig(){
+      try {
+        const r = await fetch("/config");
+        if(!r.ok) throw new Error("config "+r.status);
+        applyConfig(await r.json());
+      } catch (e) {
+        applyConfig({
+          user_id:"demo-user-1", workspace_label:"demo-user-1", effective_mode:"demo",
+          can_reset_demo:true, can_run_live_audit:false, missing_for_live:[],
+        });
+      }
+    }
+
+    async function runLiveAudit(){
+      const btn = document.getElementById("live-btn");
+      const cards = document.getElementById("cards");
+      if(btn){ btn.disabled=true; btn.textContent="Ingesting workspace…"; }
+      cards.innerHTML = `<div class="loading">Ingesting workspace via Scalekit, embedding docs, running passes…</div>`;
+      try {
+        const r = await fetch("/audit/run",{method:"POST"});
+        if(!r.ok){
+          const err = await r.json().catch(()=>({}));
+          throw new Error(err.detail || ("live audit "+r.status));
+        }
+        applyAudit(await r.json(), r.headers.get("X-Custodian-Audit-Source") || "live");
+      } catch (e) {
+        cards.innerHTML = `<div class="empty">Live audit failed: ${esc(String(e.message||e))}</div>`;
+      } finally {
+        if(btn){ btn.disabled=false; btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg> Run live audit`; }
+      }
+    }
+
     async function load(){
       try {
-        const r = await fetch("/audit");
-        if(!r.ok) throw new Error("audit "+r.status);
-        const d = await r.json();
-        applyAudit(d, r.headers.get("X-Custodian-Audit-Source") || "cache");
+        let { data, source, needsLive } = await fetchAudit();
+        if(needsLive && CONFIG?.can_run_live_audit){
+          await runLiveAudit();
+          return;
+        }
+        applyAudit(data, source);
       } catch (e) {
         try {
           const r = await fetch("/static/fallback-audit.json");
@@ -471,7 +568,7 @@
           applyAudit(await r.json(), "fallback");
         } catch (e2) {
           document.getElementById("cards").innerHTML =
-            `<div class="empty">Couldn't reach <span class="mono">/audit</span>. Start the app:<br><span class="mono">uvicorn app.main:app --reload</span></div>`;
+            `<div class="empty">Couldn't load audit. ${esc(String(e.message||e))}<br><span class="mono">Set env keys for live mode or start the app locally.</span></div>`;
         }
       }
     }
@@ -490,7 +587,8 @@
     }
     document.getElementById("run-btn").onclick = load;
     document.getElementById("reset-btn").onclick = resetDemo;
-    load();
+    document.getElementById("live-btn").onclick = runLiveAudit;
+    (async ()=>{ await loadConfig(); await load(); })();
   </script>
 </body>
 </html>

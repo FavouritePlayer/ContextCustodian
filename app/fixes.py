@@ -9,18 +9,14 @@ updated ("index"). No overclaiming: the UI shows which actually happened.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from app.config import settings
 from app.models import AuditResponse, Finding
 from app.scalekit_client import client_for
 
-# move_file in A's real client needs a real Drive FOLDER ID, not a path string.
-# Create /Quarantine and /Archive folders in the workspace once and put their IDs here
-# (or in .env). Empty -> the live move is skipped and we stay in "index" mode.
-QUARANTINE_FOLDER_ID = os.getenv("QUARANTINE_FOLDER_ID", "")
-ARCHIVE_FOLDER_ID = os.getenv("ARCHIVE_FOLDER_ID", "")
+QUARANTINE_FOLDER_ID = settings.QUARANTINE_FOLDER_ID
+ARCHIVE_FOLDER_ID = settings.ARCHIVE_FOLDER_ID
 
 
 def apply_fix(finding: Finding, user_id: str) -> str:

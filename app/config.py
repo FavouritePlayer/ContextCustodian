@@ -25,5 +25,16 @@ class Settings:
 
     AUDIT_CACHE_PATH = os.environ.get("AUDIT_CACHE_PATH", "cache/audit.json")
 
+    # demo — always mock cache | live — real workspace when keys set | auto — live if keys set else demo
+    AUDIT_MODE = os.environ.get("AUDIT_MODE", "auto").strip().lower()
+    if AUDIT_MODE not in ("demo", "live", "auto"):
+        AUDIT_MODE = "auto"
+
+    # Sidebar / topbar display name (defaults to DEMO_USER_ID)
+    WORKSPACE_LABEL = os.environ.get("WORKSPACE_LABEL", "")
+
+    QUARANTINE_FOLDER_ID = os.environ.get("QUARANTINE_FOLDER_ID", "")
+    ARCHIVE_FOLDER_ID = os.environ.get("ARCHIVE_FOLDER_ID", "")
+
 
 settings = Settings()
