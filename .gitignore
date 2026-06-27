@@ -4,3 +4,4 @@ __pycache__/
 .env
 local_data/
 cache/corpus_manifest.json
+fixtures/docs/
