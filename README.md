@@ -57,6 +57,11 @@ separate Actian "acts as a specific user" challenge.
   (serves `data/audit_cache.json` if present)
 - `POST /fix { finding_id }` → runs `fix.action` as the user, returns updated `Finding` + new metrics
 
+## Deploy (Render)
+
+See **`RENDER.md`** — `render.yaml` defines the private VectorAI pserv + public FastAPI web
+service. Mock audit works without Actian license or OpenAI keys.
+
 ## Status
 Scaffold + integrations wired. Detection passes, fix execution, fixture, and dashboard UI
 are the person-split work (`TODO(person-split)` markers in `app/main.py`).

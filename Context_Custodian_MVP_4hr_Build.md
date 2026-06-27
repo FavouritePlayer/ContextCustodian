@@ -1,5 +1,68 @@
 🧹 Context Custodian — 4-Hour MVP Build Plan (v2)
 
+________________
+
+LIVE STATUS (read this before the plan below — last updated 2026-06-27, Person A's side)
+
+This doc is the original plan as written. Treat it as the spec, but the actual
+build has moved past parts of it and corrected a few wrong assumptions in it.
+If you're a fresh agent (e.g. picking this up in Cursor instead of Claude
+Code), read this section, then COMMUNICATIONS_FOR_A.md's Messages section for
+the detailed handoff, before touching code.
+
+Person A (detection engine + metrics) — done:
+* Repo scaffolded: app/ (config, models, vectorstore, scalekit_client,
+  embeddings, anthropic_client, chunking, corpus, metrics, ingest, audit,
+  main, passes/{injection,stale,redundancy}), scripts/ (run_vectorai.sh,
+  activate_license.sh, install.sh, scalekit_authorize.py).
+* Finding/FixAction contract locked in app/models.py. GET /audit and POST
+  /fix live in app/main.py. /audit currently serves a seeded mock
+  (cache/audit.json) matching the section 6 fixture heroes, so Person B's UI
+  work was never blocked on the real pipeline.
+* Actian VectorAI: running locally in Docker, 1M-vector trial key activated
+  (state: licensed, not the 5,000 Community cap). Activation is NOT a docker
+  env var — Appendix A below is wrong about that detail (see correction
+  below). It's a REST call (scripts/activate_license.sh) to the same
+  endpoint the container's own Local UI License Manager page uses.
+* Scalekit: real account, real Google Drive + Google Docs OAuth connections
+  created in the dashboard (Offline access + Consent prompt, so refresh
+  tokens actually get issued). app/scalekit_client.py is fully implemented
+  against the confirmed actions.request() proxy pattern — list_files,
+  read_file, list_permissions, revoke_permission, move_file are all real
+  code, not stubs.
+* The three detection passes (injection, stale, redundancy) are written and
+  import cleanly, but have NOT been run against real or fixture data yet —
+  see "Not done yet" below.
+
+Corrections to this doc's Appendix A (found by inspecting the real, running
+container and its admin UI — not guesses):
+* The 1M trial key is activated via a REST call (POST /licenses/add with
+  {"product_key": "..."}, port 6573) or the Local UI at
+  localhost:6575/dashboard/license — NOT an env var passed to `docker run`.
+* The protobuf/grpcio-status pin direction in this doc's Appendix A is
+  stale for the package versions currently on PyPI. The actually-correct
+  range (verified empirically): protobuf>=6.31.1,<7.0.0 and
+  grpcio-status>=1.64,<1.67. scripts/install.sh has the corrected sequence.
+
+Not done yet (the real blocker, as of this update):
+* Scalekit OAuth handshake is created but NOT authorized — two connected
+  accounts exist (user_id "demo-user-1") but both are status != ACTIVE.
+  Run `source .venv/bin/activate && PYTHONPATH=. python3
+  scripts/scalekit_authorize.py` to get fresh magic links (they're
+  time-limited, so don't reuse old ones from chat history), open both in a
+  browser, sign in with the Google account that owns the workspace docs,
+  then re-run the script to confirm ACTIVE.
+* Once both connections are ACTIVE: run a real ingest
+  (app.ingest.ingest_workspace), then app.audit.run_audit, sanity-check the
+  three passes against real output, then replace the mock cache/audit.json.
+* Person B's seeded fixture (section 6) doesn't exist yet as of this
+  update — detection-pass threshold tuning is blocked on it. Check
+  COMMUNICATIONS_FOR_B.md / ask B for status.
+* Exposure-pass detection and the real POST /fix implementation are
+  Person B's territory and still open per the task split below.
+
+________________
+
 REFERENCE GUIDES FOR THE BUILD AGENTS (read first):
 * Scalekit AgentKit guide: https://scalekitinc.notion.site/sk-agentkit-hackathon-guide  (Notion page, needs a browser. Open on-site and grab the connect/token/permission calls, or ask the Scalekit mentors.)
 * Actian VectorAI DB guide: https://gerimate.github.io/actian-hackathon-guide/  (concrete SDK + deploy steps. Key facts copied into Appendix A so you do not need the browser.)

@@ -1,0 +1,85 @@
+# Context Custodian — Render Blueprint (Person B step 4)
+#
+# Two services on Render's private network:
+#   vectorai (pserv) — actian/vectorai:latest, not public
+#   context-custodian (web) — FastAPI + static dashboard, public URL
+#
+# Apply: Render Dashboard → New → Blueprint → connect this repo → Apply.
+# Claim hackathon credits first: https://credits-portal-mmdm.onrender.com/claim/hack-day-sf-scalekit-2026
+#
+# After first sync, set the sync:false secrets in the Dashboard (see RENDER.md).
+
+services:
+  # Actian VectorAI DB — private Docker image, persistent disk, NOT publicly exposed.
+  - type: pserv
+    name: vectorai
+    runtime: image
+    plan: starter
+    region: oregon
+    image:
+      url: docker.io/actian/vectorai:latest
+    envVars:
+      - key: ACTIAN_VECTORAI_ACCEPT_EULA
+        value: "YES"
+      # Optional — activates 1M-vector trial on first deploy when set in Dashboard.
+      - key: ACTIAN_PRODUCT_KEY
+        sync: false
+    disk:
+      name: vectorai-data
+      mountPath: /var/lib/actian-vectorai
+      sizeGB: 1
+    afterFirstDeployCommand: |
+      if [ -n "${ACTIAN_PRODUCT_KEY:-}" ]; then
+        echo "Activating Actian license..."
+        curl -sf -X POST "http://localhost:6573/licenses/add" \
+          -H "Content-Type: application/json" \
+          -d "{\"product_key\":\"${ACTIAN_PRODUCT_KEY}\"}" || true
+        curl -sf "http://localhost:6573/licenses/status" || true
+      else
+        echo "No ACTIAN_PRODUCT_KEY — Community 5k vector cap (fine for mock-audit demo)."
+      fi
+
+  # Agent app — public demo URL; connects to vectorai over the private network.
+  - type: web
+    name: context-custodian
+    runtime: python
+    plan: starter
+    region: oregon
+    buildCommand: bash scripts/render_build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: DEMO_USER_ID
+        value: demo-user-1
+      # Private-network hostname for the vectorai pserv (gRPC client port is 6574).
+      - key: VECTORAI_HOST
+        value: vectorai:6574
+      - key: AUDIT_CACHE_PATH
+        value: cache/audit.json
+      - key: EMBED_MODEL
+        value: text-embedding-3-small
+      - key: EMBED_DIM
+        value: "1536"
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      # --- set these in the Render Dashboard (never commit real values) ---
+      - key: SCALEKIT_CLIENT_ID
+        sync: false
+      - key: SCALEKIT_CLIENT_SECRET
+        sync: false
+      - key: SCALEKIT_ENV_URL
+        sync: false
+      - key: GOOGLEDRIVE_CONNECTION_NAME
+        sync: false
+      - key: GOOGLEDOCS_CONNECTION_NAME
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: QUARANTINE_FOLDER_ID
+        sync: false
+      - key: ARCHIVE_FOLDER_ID
+        sync: false

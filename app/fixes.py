@@ -9,37 +9,54 @@ updated ("index"). No overclaiming: the UI shows which actually happened.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from app.config import settings
 from app.models import AuditResponse, Finding
 from app.scalekit_client import client_for
 
-QUARANTINE_FOLDER = "/Quarantine"   # injection / stale: de-index, move out of the ingestible surface
-ARCHIVE_FOLDER = "/Archive"         # redundancy: keep canonical, archive the rest with a pointer
+# move_file in A's real client needs a real Drive FOLDER ID, not a path string.
+# Create /Quarantine and /Archive folders in the workspace once and put their IDs here
+# (or in .env). Empty -> the live move is skipped and we stay in "index" mode.
+QUARANTINE_FOLDER_ID = os.getenv("QUARANTINE_FOLDER_ID", "")
+ARCHIVE_FOLDER_ID = os.getenv("ARCHIVE_FOLDER_ID", "")
 
 
 def apply_fix(finding: Finding, user_id: str) -> str:
-    """Run finding.fix.action as the user. Returns "workspace" if the live Scalekit
-    action ran, or "index" if Scalekit isn't wired yet (audit/index updated only).
-    Real errors propagate; only the not-yet-implemented stubs fall back to "index"."""
-    sk = client_for(user_id)
+    """Run finding.fix.action as the user via Scalekit. Returns:
+      "workspace" — the live Drive action actually ran, or
+      "index"     — audit/index updated only (Scalekit not configured here, the
+                    connected account isn't authorized, the mock cache's file_ids
+                    aren't real Drive ids, or a destination folder id isn't set).
+    A's Scalekit calls are real now but go live only once .env has creds + the
+    account is ACTIVE + cache/audit.json holds real Drive file_ids. Until then we
+    degrade to index mode so the demo stays honest (the UI labels it accordingly)."""
+    if not settings.SCALEKIT_CLIENT_ID:
+        return "index"   # Scalekit not configured on this machine
+
     action = finding.fix.action
     targets = finding.fix.target_file_ids
     try:
+        sk = client_for(user_id)
         if action in ("quarantine", "collapse"):
-            folder = QUARANTINE_FOLDER if action == "quarantine" else ARCHIVE_FOLDER
+            folder_id = QUARANTINE_FOLDER_ID if action == "quarantine" else ARCHIVE_FOLDER_ID
+            if not folder_id:
+                return "index"                       # destination folder not configured yet
             for file_id in targets:
-                sk.move_file(file_id, folder)        # reversible: a move, never a delete
+                sk.move_file(file_id, folder_id)     # reversible: a move, never a delete
         elif action == "revoke":
             for file_id in targets:
                 for grant in sk.list_permissions(file_id):
-                    sk.revoke_permission(file_id, grant["id"])
+                    if grant.get("type") == "anyone":  # revoke the public link (safe, unambiguous)
+                        sk.revoke_permission(file_id, grant["id"])
+                    # per-user external revocation is refined in the exposure pass (Task 5)
         else:
             raise ValueError(f"unknown fix action: {action!r}")
         return "workspace"
-    except NotImplementedError:
-        return "index"   # connect spike pending — see app/scalekit_client.py stubs
+    except Exception as e:  # not-authorized / fake mock ids / unconfirmed PATCH-DELETE shape
+        print(f"[fix] live Scalekit action fell back to index mode: {e!r}")
+        return "index"
 
 
 def persist_audit(audit: AuditResponse) -> None:
