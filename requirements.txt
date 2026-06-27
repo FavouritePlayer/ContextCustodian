@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+python-dotenv
+tiktoken
+anthropic
+openai
+actian-vectorai-client
+
+# scalekit-sdk-python is installed separately — see scripts/install.sh.
+# It pins protobuf<7.0.0, which silently breaks actian-vectorai-client.
+# Always install scalekit with --no-deps, then re-pin protobuf/grpcio-status up.
