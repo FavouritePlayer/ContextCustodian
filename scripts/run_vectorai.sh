@@ -12,4 +12,7 @@ docker run -d --name vectorai \
   -e ACTIAN_VECTORAI_ACCEPT_EULA=YES \
   actian/vectorai:latest
 
+echo "Starts on the Community 5,000-vector cap. Run scripts/activate_license.sh"
+echo "once you have the trial product key to unlock the 1M-vector tier."
+
 echo "VectorAI starting on localhost:6574 — tail logs with: docker logs -f vectorai"
