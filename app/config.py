@@ -11,6 +11,8 @@ class Settings:
     SCALEKIT_CLIENT_ID = os.environ.get("SCALEKIT_CLIENT_ID", "")
     SCALEKIT_CLIENT_SECRET = os.environ.get("SCALEKIT_CLIENT_SECRET", "")
     SCALEKIT_ENV_URL = os.environ.get("SCALEKIT_ENV_URL", "")
+    GOOGLEDRIVE_CONNECTION_NAME = os.environ.get("GOOGLEDRIVE_CONNECTION_NAME", "googledrive")
+    GOOGLEDOCS_CONNECTION_NAME = os.environ.get("GOOGLEDOCS_CONNECTION_NAME", "googledocs")
 
     VECTORAI_HOST = os.environ.get("VECTORAI_HOST", "localhost:6574")
 
