@@ -106,7 +106,10 @@
     .btn:hover { background:var(--bg-elevated); }
     .btn-accent { background:var(--accent); border-color:var(--accent); color:#fff; }
     .btn-accent:hover { background:var(--accent-soft); }
+    .btn-ghost { background:transparent; color:var(--text-secondary); }
+    .btn-ghost:hover { color:var(--text-primary); background:var(--bg-elevated); }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .cache-tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-left:6px; }
 
     /* hero */
     .hero {
@@ -246,9 +249,12 @@
             <span class="dot" style="background:var(--positive)"></span>
             Acting as you
           </div>
+          <button class="btn btn-ghost" id="reset-btn" title="Restore golden demo cache">
+            Reset demo
+          </button>
           <button class="btn btn-accent" id="run-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/><path d="M21 3v6h-6"/></svg>
-            Re-run audit
+            Reload audit
           </button>
         </div>
       </div>
@@ -306,7 +312,20 @@
     const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
       ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
-    let STATE = { findings:[], before:{doc_count:0,ingestible_tokens:0}, avg:0, activeFilter:"all" };
+    let STATE = { findings:[], before:{doc_count:0,ingestible_tokens:0}, avg:0, activeFilter:"all", auditSource:"" };
+
+    function applyAudit(d, source){
+      STATE.findings = d.findings.map(f=>({...f, pass:f.pass||f.pass_name}));
+      STATE.before = d.metrics_before;
+      STATE.avg = STATE.before.doc_count ? STATE.before.ingestible_tokens/STATE.before.doc_count : 0;
+      STATE.auditSource = source;
+      const when = d.generated_at ? new Date(d.generated_at).toLocaleString() : "unknown";
+      const srcLabel = { cache:"pre-cached", live:"live run", fallback:"offline fallback" }[source] || source;
+      document.getElementById("run-meta").innerHTML =
+        `${STATE.findings.length} findings · baseline ${fmt(STATE.before.ingestible_tokens)} tokens across ${STATE.before.doc_count} docs · audited ${when}` +
+        `<span class="cache-tag">${srcLabel}</span>`;
+      render();
+    }
 
     // honest per-finding impact: target docs removed × avg tokens/doc; revoke removes neither
     function impactOf(f){
@@ -441,20 +460,36 @@
 
     async function load(){
       try {
-        const r = await fetch("/audit"); const d = await r.json();
-        STATE.findings = d.findings.map(f=>({...f, pass:f.pass||f.pass_name}));
-        STATE.before = d.metrics_before;
-        STATE.avg = STATE.before.doc_count ? STATE.before.ingestible_tokens/STATE.before.doc_count : 0;
-        const when = d.generated_at ? new Date(d.generated_at).toLocaleString() : "unknown";
-        document.getElementById("run-meta").innerHTML =
-          `${STATE.findings.length} findings · baseline ${fmt(STATE.before.ingestible_tokens)} tokens across ${STATE.before.doc_count} docs · audited ${when}`;
-        render();
+        const r = await fetch("/audit");
+        if(!r.ok) throw new Error("audit "+r.status);
+        const d = await r.json();
+        applyAudit(d, r.headers.get("X-Custodian-Audit-Source") || "cache");
       } catch (e) {
-        document.getElementById("cards").innerHTML =
-          `<div class="empty">Couldn't reach <span class="mono">/audit</span>. Start the app:<br><span class="mono">uvicorn app.main:app --reload</span></div>`;
+        try {
+          const r = await fetch("/static/fallback-audit.json");
+          if(!r.ok) throw new Error("fallback "+r.status);
+          applyAudit(await r.json(), "fallback");
+        } catch (e2) {
+          document.getElementById("cards").innerHTML =
+            `<div class="empty">Couldn't reach <span class="mono">/audit</span>. Start the app:<br><span class="mono">uvicorn app.main:app --reload</span></div>`;
+        }
+      }
+    }
+    async function resetDemo(){
+      const btn = document.getElementById("reset-btn");
+      if(btn){ btn.disabled=true; btn.textContent="Resetting…"; }
+      try {
+        const r = await fetch("/audit/reset",{method:"POST"});
+        if(!r.ok) throw new Error("reset "+r.status);
+        applyAudit(await r.json(), "cache");
+      } catch (e) {
+        await load();
+      } finally {
+        if(btn){ btn.disabled=false; btn.textContent="Reset demo"; }
       }
     }
     document.getElementById("run-btn").onclick = load;
+    document.getElementById("reset-btn").onclick = resetDemo;
     load();
   </script>
 </body>

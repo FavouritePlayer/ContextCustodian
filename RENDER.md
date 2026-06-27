@@ -65,7 +65,15 @@ curl "http://localhost:6573/licenses/status"
 
 Expect `"state": "licensed"` (or similar) and `max_vectors` in the millions.
 
-## 6. Scalekit OAuth (for live fixes on Render)
+## 6. Demo rehearsal (step 5)
+
+See **`DEMO.md`** for the 4-minute script. Before presenting:
+
+- Click **Reset demo** on the dashboard (or run `python scripts/reset_demo_cache.py`)
+- Confirm `X-Custodian-Audit-Source: cache` on `GET /audit`
+- Record a fallback clip and save the link in `demo/FALLBACK_LINK.txt`
+
+## 7. Scalekit OAuth (for live fixes on Render)
 
 Connected accounts must be `ACTIVE`. Run locally (magic links are time-limited):
 

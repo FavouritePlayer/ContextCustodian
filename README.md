@@ -62,6 +62,11 @@ separate Actian "acts as a specific user" challenge.
 See **`RENDER.md`** — `render.yaml` defines the private VectorAI pserv + public FastAPI web
 service. Mock audit works without Actian license or OpenAI keys.
 
+## Demo (step 5)
+
+See **`DEMO.md`** — 4-minute script, reset/rehearsal flow, fallback recording guide.
+`POST /audit/reset` and **Reset demo** in the UI restore `cache/audit.demo.json`.
+
 ## Status
 Scaffold + integrations wired. Detection passes, fix execution, fixture, and dashboard UI
 are the person-split work (`TODO(person-split)` markers in `app/main.py`).
