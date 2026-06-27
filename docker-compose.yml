@@ -1,0 +1,13 @@
+# Local Actian VectorAI DB (Appendix A). On Render this is a private Docker service
+# (actian/vectorai:latest) with a persistent disk at /var/lib/actian-vectorai.
+services:
+  vectorai:
+    image: actian/vectorai:latest
+    container_name: vectorai
+    ports:
+      - "6573-6575:6573-6575"
+    environment:
+      ACTIAN_VECTORAI_ACCEPT_EULA: "YES"
+    volumes:
+      - ./local_data:/var/lib/actian-vectorai
+    restart: unless-stopped

@@ -37,11 +37,11 @@ class CorpusManifest(BaseModel):
     def save(self, path: Path | None = None) -> None:
         path = path or Path(settings.AUDIT_CACHE_PATH).parent / "corpus_manifest.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.model_dump_json(indent=2))
+        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path | None = None) -> "CorpusManifest":
         path = path or Path(settings.AUDIT_CACHE_PATH).parent / "corpus_manifest.json"
         if not path.exists():
             return cls()
-        return cls.model_validate_json(path.read_text())
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))

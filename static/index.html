@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Context Custodian — Workspace Audit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-app:#0A0A0F; --bg-surface:#121218; --bg-surface-2:#16161E; --bg-elevated:#1C1C26;
+      --border:#232330; --border-soft:rgba(255,255,255,.06);
+      --text-primary:#F4F4F6; --text-secondary:#9A9AA8; --text-muted:#5C5C6B;
+      --accent:#8B5CF6; --accent-soft:#A78BFA; --accent-glow:rgba(139,92,246,.35);
+      --positive:#4ADE80; --negative:#F87171;
+      --injection:#F87171; --stale:#FBBF24; --redundancy:#8B5CF6; --exposure:#38BDF8;
+      --display:'Space Grotesk',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body {
+      margin:0; background:var(--bg-app); color:var(--text-primary);
+      font-family:var(--body); font-size:14px; line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+    }
+    .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+    .display { font-family:var(--display); letter-spacing:-.02em; }
+    .muted { color:var(--text-muted); }
+    .sec { color:var(--text-secondary); }
+
+    .app { display:grid; grid-template-columns:264px 1fr; min-height:100vh; }
+
+    /* ---------- sidebar ---------- */
+    .sidebar {
+      background:var(--bg-surface); border-right:1px solid var(--border);
+      padding:22px 16px; display:flex; flex-direction:column; gap:22px;
+      position:sticky; top:0; height:100vh; overflow-y:auto;
+    }
+    .brand { display:flex; align-items:center; gap:11px; }
+    .brand .mono-tile {
+      width:38px; height:38px; border-radius:11px; flex:none;
+      background:linear-gradient(150deg,#4C2A8C,#8B5CF6); display:grid; place-items:center;
+      font-family:var(--display); font-weight:700; font-size:19px; color:#fff;
+      box-shadow:0 0 0 1px var(--border-soft), 0 6px 18px -8px var(--accent-glow);
+    }
+    .brand h1 { font-family:var(--display); font-size:15px; font-weight:600; margin:0; letter-spacing:-.01em; }
+    .brand p { margin:1px 0 0; font-size:11px; color:var(--text-muted); }
+
+    .identity {
+      background:var(--bg-surface-2); border:1px solid var(--border); border-radius:13px; padding:13px;
+    }
+    .identity .row { display:flex; align-items:center; gap:9px; }
+    .avatar {
+      width:30px; height:30px; border-radius:50%; flex:none;
+      background:radial-gradient(circle at 30% 25%,var(--accent-soft),#3b2a66);
+      display:grid; place-items:center; font-size:12px; font-weight:600; color:#fff;
+    }
+    .identity .label { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); }
+    .identity .uid { font-size:13px; font-weight:600; }
+    .as-me-tag {
+      margin-top:10px; font-size:11px; color:var(--accent-soft); display:flex; align-items:center; gap:6px;
+      background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.22); border-radius:8px; padding:6px 9px;
+    }
+    .as-me-tag svg { flex:none; }
+
+    .nav-label { font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-muted); padding:0 6px 7px; }
+    .nav { display:flex; flex-direction:column; gap:3px; }
+    .nav-item {
+      display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:10px;
+      color:var(--text-secondary); cursor:pointer; border:1px solid transparent; transition:.15s; font-size:13px;
+      width:100%; text-align:left; background:none; font-family:var(--body);
+    }
+    .nav-item:hover { background:var(--bg-elevated); color:var(--text-primary); }
+    .nav-item.active { background:rgba(139,92,246,.10); border-color:rgba(139,92,246,.22); color:var(--text-primary); }
+    .nav-item.active.all { box-shadow:inset 2px 0 0 var(--accent); }
+    .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+    .nav-item .name { flex:1; }
+    .count-badge {
+      font-family:var(--mono); font-size:11px; min-width:20px; height:20px; padding:0 6px; border-radius:999px;
+      background:var(--bg-elevated); color:var(--text-secondary); display:grid; place-items:center;
+    }
+    .reassure {
+      margin-top:auto; background:var(--bg-surface-2); border:1px solid var(--border); border-radius:13px; padding:13px;
+      display:flex; gap:10px; align-items:flex-start;
+    }
+    .reassure svg { flex:none; color:var(--positive); margin-top:1px; }
+    .reassure b { font-size:12.5px; }
+    .reassure p { margin:2px 0 0; font-size:11.5px; color:var(--text-muted); line-height:1.45; }
+
+    /* ---------- main ---------- */
+    .main { padding:24px 30px 56px; max-width:1240px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+    .topbar h2 { font-family:var(--display); font-size:21px; font-weight:600; margin:0; }
+    .topbar .sub { font-size:12.5px; color:var(--text-muted); margin-top:2px; }
+    .topbar-right { display:flex; align-items:center; gap:10px; }
+    .chip {
+      display:flex; align-items:center; gap:7px; padding:8px 13px; border-radius:999px;
+      background:var(--bg-surface); border:1px solid var(--border); font-size:12.5px; color:var(--text-secondary);
+    }
+    .btn {
+      font-family:var(--body); font-size:13px; font-weight:500; border-radius:999px; padding:9px 16px;
+      border:1px solid var(--border); background:var(--bg-surface); color:var(--text-primary); cursor:pointer;
+      display:inline-flex; align-items:center; gap:7px; transition:.15s;
+    }
+    .btn:hover { background:var(--bg-elevated); }
+    .btn-accent { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-accent:hover { background:var(--accent-soft); }
+    .btn-ghost { background:transparent; color:var(--text-secondary); }
+    .btn-ghost:hover { color:var(--text-primary); background:var(--bg-elevated); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .hidden { display:none !important; }
+    .cache-tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-left:6px; }
+    .mode-chip.live { border-color:rgba(74,222,128,.35); color:var(--positive); }
+    .mode-chip.demo { border-color:rgba(154,154,168,.35); }
+    .banner {
+      margin-bottom:18px; padding:12px 16px; border-radius:12px; font-size:13px;
+      background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.22); color:#cbb8f0;
+    }
+    .banner.warn { background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.25); color:#fcd34d; }
+
+    /* hero */
+    .hero {
+      position:relative; overflow:hidden; border-radius:18px; padding:26px 28px; margin-bottom:22px;
+      background:linear-gradient(150deg,#1a1430 0%,#2A1B5E 48%,#4C2A8C 100%);
+      border:1px solid rgba(139,92,246,.25);
+    }
+    .hero::after {
+      content:""; position:absolute; top:-60px; right:-40px; width:320px; height:320px;
+      background:radial-gradient(circle,var(--accent-glow),transparent 70%); pointer-events:none;
+    }
+    .hero .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--accent-soft); }
+    .hero-grid { display:grid; grid-template-columns:1.15fr 1fr; gap:32px; align-items:center; position:relative; z-index:1; }
+    .ledger { display:flex; align-items:baseline; gap:16px; margin-top:8px; flex-wrap:wrap; }
+    .big-num { font-family:var(--display); font-weight:700; font-size:58px; line-height:1; letter-spacing:-.03em; }
+    .arrow-to { color:var(--accent-soft); font-size:26px; }
+    .after-num { font-family:var(--display); font-weight:600; font-size:40px; line-height:1; color:var(--positive); }
+    .ledger .unit { font-size:13px; color:var(--text-secondary); margin-left:4px; }
+    .hero .thesis { margin-top:14px; font-size:13px; color:#cbb8f0; max-width:46ch; line-height:1.55; }
+
+    .surface-meter { }
+    .meter-head { display:flex; justify-content:space-between; font-size:11.5px; color:#cbb8f0; margin-bottom:8px; }
+    .bar { height:14px; border-radius:8px; background:rgba(0,0,0,.35); overflow:hidden; display:flex; }
+    .bar .keep { background:linear-gradient(90deg,#6D3FB5,#A78BFA); height:100%; transition:width .8s cubic-bezier(.2,.7,.2,1); }
+    .bar .reclaimed { background:repeating-linear-gradient(45deg,rgba(74,222,128,.5),rgba(74,222,128,.5) 6px,rgba(74,222,128,.25) 6px,rgba(74,222,128,.25) 12px); height:100%; transition:width .8s cubic-bezier(.2,.7,.2,1); }
+    .meter-legend { display:flex; gap:18px; margin-top:10px; font-size:11.5px; color:#cbb8f0; }
+    .meter-legend span { display:flex; align-items:center; gap:6px; }
+    .sw { width:10px; height:10px; border-radius:3px; }
+
+    /* findings */
+    .section-head { display:flex; align-items:center; justify-content:space-between; margin:26px 0 14px; }
+    .section-head h3 { font-family:var(--display); font-size:17px; font-weight:600; margin:0; }
+    .filters { display:flex; gap:7px; }
+    .fchip {
+      font-size:12px; padding:6px 12px; border-radius:999px; background:var(--bg-surface);
+      border:1px solid var(--border); color:var(--text-secondary); cursor:pointer; transition:.15s;
+      display:flex; align-items:center; gap:7px;
+    }
+    .fchip:hover { color:var(--text-primary); }
+    .fchip.active { background:var(--bg-elevated); color:var(--text-primary); border-color:var(--accent); }
+
+    .cards { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    .card {
+      background:var(--bg-surface); border:1px solid var(--border); border-radius:16px; padding:20px;
+      display:flex; flex-direction:column; gap:13px; position:relative; transition:.25s; overflow:hidden;
+    }
+    .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--pass-color); opacity:.85; }
+    .card.fixed { opacity:.72; }
+    .card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .pass-tag { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--pass-color); text-transform:capitalize; }
+    .sev { font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; padding:3px 9px; border-radius:999px; font-weight:600; }
+    .sev.high { background:rgba(248,113,113,.13); color:#fca5a5; }
+    .sev.med { background:rgba(251,191,36,.13); color:#fcd34d; }
+    .sev.low { background:rgba(154,154,168,.13); color:var(--text-secondary); }
+    .card .title { font-size:15px; font-weight:600; line-height:1.35; }
+    .receipt {
+      font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); line-height:1.55;
+      background:var(--bg-surface-2); border:1px solid var(--border); border-left:2px solid var(--pass-color);
+      border-radius:8px; padding:10px 12px;
+    }
+    .card-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:auto; }
+    .impact { display:flex; gap:14px; font-size:12px; }
+    .impact .v { font-family:var(--mono); font-weight:600; color:var(--text-primary); }
+    .impact .v.pos { color:var(--positive); }
+    .impact .k { display:block; font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+    .action-label { font-size:10.5px; color:var(--text-muted); }
+    .fix-btn { white-space:nowrap; }
+    .fixed-state { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--positive); }
+    .undo { background:none; border:none; color:var(--text-muted); font-size:11.5px; cursor:pointer; text-decoration:underline; font-family:var(--body); }
+    .undo:hover { color:var(--text-secondary); }
+    .sim-tag { font-size:10px; color:var(--text-muted); font-style:italic; }
+    .spark { position:absolute; right:14px; bottom:50px; opacity:.5; pointer-events:none; }
+
+    /* metric tiles */
+    .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:22px; }
+    .tile { background:var(--bg-surface-2); border:1px solid var(--border); border-radius:14px; padding:17px 18px; }
+    .tile .k { font-size:11.5px; color:var(--text-secondary); }
+    .tile .v { font-family:var(--display); font-size:30px; font-weight:600; margin-top:9px; letter-spacing:-.02em; }
+    .tile .v.pos { color:var(--positive); }
+
+    .empty, .loading { padding:60px; text-align:center; color:var(--text-muted); }
+
+    @media (max-width:1080px){ .hero-grid{grid-template-columns:1fr; gap:22px;} .cards,.tiles{grid-template-columns:1fr 1fr;} }
+    @media (max-width:760px){ .app{grid-template-columns:1fr;} .sidebar{display:none;} .cards,.tiles{grid-template-columns:1fr;} .big-num{font-size:46px;} }
+    @media (prefers-reduced-motion:reduce){ *{transition:none!important; scroll-behavior:auto;} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mono-tile">C</div>
+        <div>
+          <h1>Context Custodian</h1>
+          <p>agent-first workspace</p>
+        </div>
+      </div>
+
+      <div class="identity">
+        <div class="row">
+          <div class="avatar" id="id-avatar">D</div>
+          <div>
+            <div class="label">Workspace</div>
+            <div class="uid" id="id-label">—</div>
+            <div class="label" style="margin-top:8px">Acting as</div>
+            <div class="uid mono" id="id-uid">—</div>
+          </div>
+        </div>
+        <div class="as-me-tag">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a4 4 0 0 0-4 4v3a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4Z"/><path d="M19 11a7 7 0 0 1-14 0"/></svg>
+          Every fix runs as you, scoped
+        </div>
+      </div>
+
+      <div>
+        <div class="nav-label">Passes</div>
+        <nav class="nav" id="nav"></nav>
+      </div>
+
+      <div class="reassure">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+        <div>
+          <b>Nothing is destroyed</b>
+          <p>Quarantine, collapse and revoke are all reversible. Docs move; they don't disappear.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================== MAIN ===================== -->
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h2>Workspace audit</h2>
+          <div class="sub" id="run-meta">Loading…</div>
+        </div>
+        <div class="topbar-right">
+          <div class="chip mode-chip" id="mode-chip">
+            <span class="dot" id="mode-dot" style="background:var(--text-muted)"></span>
+            <span id="mode-text">Loading…</span>
+          </div>
+          <button class="btn btn-ghost hidden" id="reset-btn" title="Restore golden demo cache">
+            Reset demo
+          </button>
+          <button class="btn btn-accent hidden" id="live-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg>
+            Run live audit
+          </button>
+          <button class="btn btn-accent" id="run-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/><path d="M21 3v6h-6"/></svg>
+            Reload audit
+          </button>
+        </div>
+      </div>
+      <div class="banner hidden" id="live-banner"></div>
+
+      <!-- HERO: the ingestion-tax ledger -->
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">Agent-ingestible surface</div>
+            <div class="ledger">
+              <div><span class="big-num mono" id="tokens-now">—</span><span class="unit">tokens read by every agent</span></div>
+            </div>
+            <div class="ledger" style="margin-top:14px">
+              <span class="sec mono" id="docs-now">—</span><span class="unit">docs</span>
+              <span class="arrow-to">→</span>
+              <span class="after-num mono" id="tokens-after">—</span><span class="unit">after this audit's fixes</span>
+            </div>
+            <p class="thesis">A workspace used to be browsed by humans. Now agents live in it and ingest all of it — so every junk doc is a tax on every agent that reads the space.</p>
+          </div>
+          <div class="surface-meter">
+            <div class="meter-head"><span>Ingestible surface</span><span id="reduction-pct">—</span></div>
+            <div class="bar"><div class="keep" id="bar-keep" style="width:100%"></div><div class="reclaimed" id="bar-reclaimed" style="width:0%"></div></div>
+            <div class="meter-legend">
+              <span><span class="sw" style="background:#8B5CF6"></span> Kept &amp; canonical</span>
+              <span><span class="sw" style="background:rgba(74,222,128,.5)"></span> Reclaimed (reversible)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FINDINGS -->
+      <div class="section-head">
+        <h3>Findings</h3>
+        <div class="filters" id="filters"></div>
+      </div>
+      <div class="cards" id="cards"><div class="loading">Loading findings…</div></div>
+
+      <!-- METRIC TILES -->
+      <div class="tiles" id="tiles"></div>
+    </main>
+  </div>
+
+  <script>
+    const PASS_META = {
+      injection:  { color:"var(--injection)", label:"Injection",  blurb:"Adversarial instructions aimed at an ingesting agent" },
+      stale:      { color:"var(--stale)",     label:"Stale",      blurb:"Facts that contradict the canonical version" },
+      redundancy: { color:"var(--redundancy)",label:"Redundancy", blurb:"Near-duplicate and superseded copies" },
+      exposure:   { color:"var(--exposure)",  label:"Exposure",   blurb:"Over-shared docs and stale collaborators" },
+    };
+    const PASS_ORDER = ["injection","stale","redundancy","exposure"];
+    const fmt = n => n>=1e6 ? (n/1e6).toFixed(n%1e6?2:1).replace(/\.0$/,"")+"M"
+                  : n>=1e3 ? Math.round(n/1e3)+"K" : String(n);
+    // Findings carry untrusted workspace content (the injection pass's receipt IS an attack
+    // payload). Escape every doc-derived string before it touches innerHTML — never trust it.
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+      ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+    let CONFIG = null;
+    let STATE = { findings:[], before:{doc_count:0,ingestible_tokens:0}, avg:0, activeFilter:"all", auditSource:"" };
+
+    function applyConfig(cfg){
+      CONFIG = cfg;
+      const label = cfg.workspace_label || cfg.user_id;
+      document.getElementById("id-label").textContent = label;
+      document.getElementById("id-uid").textContent = cfg.user_id;
+      document.getElementById("id-avatar").textContent = (label[0] || "U").toUpperCase();
+      const live = cfg.effective_mode === "live";
+      const chip = document.getElementById("mode-chip");
+      const dot = document.getElementById("mode-dot");
+      const text = document.getElementById("mode-text");
+      chip.classList.toggle("live", live);
+      chip.classList.toggle("demo", !live);
+      dot.style.background = live ? "var(--positive)" : "var(--text-muted)";
+      text.textContent = live ? "Live workspace" : "Demo data";
+      document.getElementById("reset-btn").classList.toggle("hidden", !cfg.can_reset_demo);
+      document.getElementById("live-btn").classList.toggle("hidden", !cfg.can_run_live_audit);
+      const banner = document.getElementById("live-banner");
+      if(live && cfg.missing_for_live?.length){
+        banner.classList.remove("hidden");
+        banner.classList.add("warn");
+        banner.textContent = "Live mode requested but missing: " + cfg.missing_for_live.join(", ");
+      } else if(live){
+        banner.classList.remove("hidden", "warn");
+        banner.textContent = "Connected for live audit — ingest runs against your Scalekit workspace as " + cfg.user_id + ".";
+      } else {
+        banner.classList.add("hidden");
+      }
+    }
+
+    function applyAudit(d, source){
+      STATE.findings = d.findings.map(f=>({...f, pass:f.pass||f.pass_name}));
+      STATE.before = d.metrics_before;
+      STATE.avg = STATE.before.doc_count ? STATE.before.ingestible_tokens/STATE.before.doc_count : 0;
+      STATE.auditSource = source;
+      const when = d.generated_at ? new Date(d.generated_at).toLocaleString() : "unknown";
+      const srcLabel = {
+        cache: CONFIG?.effective_mode === "live" ? "cached live" : "pre-cached",
+        live: "live workspace",
+        demo: "demo snapshot",
+        fallback: "offline fallback",
+      }[source] || source;
+      document.getElementById("run-meta").innerHTML =
+        `${STATE.findings.length} findings · baseline ${fmt(STATE.before.ingestible_tokens)} tokens across ${STATE.before.doc_count} docs · audited ${when}` +
+        `<span class="cache-tag">${srcLabel}</span>`;
+      render();
+    }
+
+    // honest per-finding impact: target docs removed × avg tokens/doc; revoke removes neither
+    function impactOf(f){
+      const removesDocs = f.fix.action === "quarantine" || f.fix.action === "collapse";
+      const docs = removesDocs ? (f.fix.target_file_ids?.length || 0) : 0;
+      return { docs, tokens: Math.round(docs * STATE.avg) };
+    }
+    const reclaimed = () => STATE.findings.filter(f=>f.fixed).reduce((a,f)=>{
+      const i=impactOf(f); a.docs+=i.docs; a.tokens+=i.tokens; return a; },{docs:0,tokens:0});
+
+    // animated number tween
+    function tween(el, to, render){
+      const from = Number(el.dataset.val||0), start=performance.now(), dur=700;
+      el.dataset.val = to;                       // commit target up front so re-renders read it
+      const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+      if(reduce){ el.textContent=render(to); return; }
+      function step(t){ const p=Math.min(1,(t-start)/dur), e=1-Math.pow(1-p,3), v=from+(to-from)*e;
+        el.textContent=render(v); if(p<1) requestAnimationFrame(step); }
+      requestAnimationFrame(step);
+      // rAF pauses when the tab is backgrounded — guarantee the final value still lands.
+      setTimeout(()=>{ el.textContent=render(to); }, dur+60);
+    }
+
+    function renderHero(){
+      const r = reclaimed(), now=STATE.before.ingestible_tokens, after=now-r.tokens;
+      tween(document.getElementById("tokens-now"), now, v=>fmt(Math.round(v)));
+      tween(document.getElementById("tokens-after"), after, v=>fmt(Math.round(v)));
+      tween(document.getElementById("docs-now"), STATE.before.doc_count - r.docs, v=>Math.round(v));
+      const keepPct = now? (after/now*100):100;
+      document.getElementById("bar-keep").style.width = keepPct+"%";
+      document.getElementById("bar-reclaimed").style.width = (100-keepPct)+"%";
+      const pct = now? (r.tokens/now*100):0;
+      document.getElementById("reduction-pct").textContent = pct>0 ? "−"+pct.toFixed(pct<1?2:1)+"% reclaimed" : "0% reclaimed";
+    }
+
+    function renderNav(){
+      const counts = {}; STATE.findings.forEach(f=>counts[f.pass]=(counts[f.pass]||0)+1);
+      const nav = document.getElementById("nav");
+      const all = `<button class="nav-item all ${STATE.activeFilter==='all'?'active':''}" data-f="all">
+        <span class="dot" style="background:var(--accent)"></span><span class="name">All findings</span>
+        <span class="count-badge">${STATE.findings.length}</span></button>`;
+      const items = PASS_ORDER.filter(p=>counts[p]).map(p=>`
+        <button class="nav-item ${STATE.activeFilter===p?'active':''}" data-f="${p}">
+          <span class="dot" style="background:${PASS_META[p].color}"></span>
+          <span class="name">${PASS_META[p].label}</span>
+          <span class="count-badge">${counts[p]}</span>
+        </button>`).join("");
+      nav.innerHTML = all + items;
+      nav.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{ STATE.activeFilter=b.dataset.f; render(); });
+
+      const filters = document.getElementById("filters");
+      filters.innerHTML = [`<button class="fchip ${STATE.activeFilter==='all'?'active':''}" data-f="all">All</button>`]
+        .concat(PASS_ORDER.filter(p=>counts[p]).map(p=>`
+          <button class="fchip ${STATE.activeFilter===p?'active':''}" data-f="${p}">
+            <span class="dot" style="background:${PASS_META[p].color}"></span>${PASS_META[p].label}</button>`)).join("");
+      filters.querySelectorAll(".fchip").forEach(b=>b.onclick=()=>{ STATE.activeFilter=b.dataset.f; render(); });
+    }
+
+    const sparkSVG = color => `<svg class="spark" width="92" height="34" viewBox="0 0 92 34"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".35"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="M0 8 C18 4 26 20 40 18 C56 16 64 28 92 30 L92 34 L0 34 Z" fill="url(#g)"/><path d="M0 8 C18 4 26 20 40 18 C56 16 64 28 92 30" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+
+    function cardHTML(f){
+      const m = PASS_META[f.pass], imp = impactOf(f);
+      const impactBlock = f.fix.action==="revoke"
+        ? `<div class="impact"><div><span class="k">Docs</span><span class="v">0</span></div><div><span class="k">Effect</span><span class="v pos">access revoked</span></div></div>`
+        : `<div class="impact"><div><span class="k">Docs</span><span class="v pos">−${imp.docs}</span></div><div><span class="k">Tokens</span><span class="v pos">−${fmt(imp.tokens)}</span></div></div>`;
+      const id = esc(f.id), action = esc(f.fix.action), sev = esc(f.severity);
+      const MODE_TAG = { workspace:"· as you", index:"· index only", already:"· index only", simulated:"· simulated (offline)" };
+      const foot = f.fixed
+        ? `<div class="card-foot"><div class="fixed-state">
+             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+             Fixed${f._mode?` <span class="sim-tag">${esc(MODE_TAG[f._mode]||"")}</span>`:``}</div>
+             <button class="undo" data-undo="${id}">Undo</button></div>`
+        : `<div class="card-foot">${impactBlock}
+             <div style="text-align:right"><div class="action-label">runs <b>${action}</b> as you</div>
+             <button class="btn btn-accent fix-btn" data-fix="${id}" style="margin-top:6px">Fix as me</button></div></div>`;
+      return `<article class="card ${f.fixed?'fixed':''}" style="--pass-color:${m.color}">
+        ${sparkSVG(m.color)}
+        <div class="card-top">
+          <span class="pass-tag"><span class="dot" style="background:${m.color}"></span>${m.label}</span>
+          <span class="sev ${sev}">${sev}</span>
+        </div>
+        <div class="title">${esc(f.title)}</div>
+        <div class="receipt">${esc(f.receipt)}</div>
+        ${foot}
+      </article>`;
+    }
+
+    function renderCards(){
+      const wrap = document.getElementById("cards");
+      const list = STATE.findings.filter(f=>STATE.activeFilter==="all"||f.pass===STATE.activeFilter);
+      wrap.innerHTML = list.length ? list.map(cardHTML).join("")
+        : `<div class="empty">No findings in this pass. The surface is clean here.</div>`;
+      wrap.querySelectorAll("[data-fix]").forEach(b=>b.onclick=()=>fixFinding(b.dataset.fix));
+      wrap.querySelectorAll("[data-undo]").forEach(b=>b.onclick=()=>undoFinding(b.dataset.undo));
+    }
+
+    function renderTiles(){
+      const r = reclaimed(), resolved = STATE.findings.filter(f=>f.fixed).length;
+      const pct = STATE.before.ingestible_tokens ? (r.tokens/STATE.before.ingestible_tokens*100) : 0;
+      document.getElementById("tiles").innerHTML = [
+        ["Docs reclaimed", `${r.docs}`, true],
+        ["Tokens reclaimed", fmt(r.tokens), true],
+        ["Surface reduced", pct>0?`${pct.toFixed(pct<1?2:1)}%`:"0%", true],
+        ["Findings resolved", `${resolved}/${STATE.findings.length}`, false],
+      ].map(([k,v,pos])=>`<div class="tile"><div class="k">${k}</div><div class="v ${pos&&v!=='0'?'pos':''}">${v}</div></div>`).join("");
+    }
+
+    function render(){ renderNav(); renderHero(); renderCards(); renderTiles(); }
+
+    async function fixFinding(id){
+      const f = STATE.findings.find(x=>x.id===id); if(!f) return;
+      const btn = document.querySelector(`[data-fix="${id}"]`);
+      if(btn){ btn.disabled=true; btn.textContent="Fixing as you…"; }
+      try {
+        const res = await fetch("/fix",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({finding_id:id})});
+        if(!res.ok) throw new Error("fix failed ("+res.status+")");
+        const updated = await res.json();
+        Object.assign(f, updated, {fixed:true});
+        f._mode = res.headers.get("X-Custodian-Fix-Mode") || "index";   // workspace | index
+      } catch (e) {
+        f.fixed = true; f._mode = "simulated";                          // server unreachable — show honestly
+      }
+      render();
+    }
+    async function undoFinding(id){
+      const f = STATE.findings.find(x=>x.id===id); if(!f) return;
+      try {
+        await fetch("/undo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({finding_id:id})});
+      } catch (e) { /* fall through to local revert — fix is reversible regardless */ }
+      f.fixed = false; delete f._mode; render();
+    }
+
+    async function fetchAudit(){
+      const r = await fetch("/audit");
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        throw new Error(err.detail || ("audit "+r.status));
+      }
+      return {
+        data: await r.json(),
+        source: r.headers.get("X-Custodian-Audit-Source") || "cache",
+        needsLive: r.headers.get("X-Custodian-Needs-Live-Run") === "true",
+      };
+    }
+
+    async function loadConfig(){
+      try {
+        const r = await fetch("/config");
+        if(!r.ok) throw new Error("config "+r.status);
+        applyConfig(await r.json());
+      } catch (e) {
+        applyConfig({
+          user_id:"demo-user-1", workspace_label:"demo-user-1", effective_mode:"demo",
+          can_reset_demo:true, can_run_live_audit:false, missing_for_live:[],
+        });
+      }
+    }
+
+    async function runLiveAudit(){
+      const btn = document.getElementById("live-btn");
+      const cards = document.getElementById("cards");
+      if(btn){ btn.disabled=true; btn.textContent="Ingesting workspace…"; }
+      cards.innerHTML = `<div class="loading">Ingesting workspace via Scalekit, embedding docs, running passes…</div>`;
+      try {
+        const r = await fetch("/audit/run",{method:"POST"});
+        if(!r.ok){
+          const err = await r.json().catch(()=>({}));
+          throw new Error(err.detail || ("live audit "+r.status));
+        }
+        applyAudit(await r.json(), r.headers.get("X-Custodian-Audit-Source") || "live");
+      } catch (e) {
+        cards.innerHTML = `<div class="empty">Live audit failed: ${esc(String(e.message||e))}</div>`;
+      } finally {
+        if(btn){ btn.disabled=false; btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg> Run live audit`; }
+      }
+    }
+
+    async function load(){
+      try {
+        let { data, source, needsLive } = await fetchAudit();
+        if(needsLive && CONFIG?.can_run_live_audit){
+          await runLiveAudit();
+          return;
+        }
+        applyAudit(data, source);
+      } catch (e) {
+        try {
+          const r = await fetch("/static/fallback-audit.json");
+          if(!r.ok) throw new Error("fallback "+r.status);
+          applyAudit(await r.json(), "fallback");
+        } catch (e2) {
+          document.getElementById("cards").innerHTML =
+            `<div class="empty">Couldn't load audit. ${esc(String(e.message||e))}<br><span class="mono">Set env keys for live mode or start the app locally.</span></div>`;
+        }
+      }
+    }
+    async function resetDemo(){
+      const btn = document.getElementById("reset-btn");
+      if(btn){ btn.disabled=true; btn.textContent="Resetting…"; }
+      try {
+        const r = await fetch("/audit/reset",{method:"POST"});
+        if(!r.ok) throw new Error("reset "+r.status);
+        applyAudit(await r.json(), "cache");
+      } catch (e) {
+        await load();
+      } finally {
+        if(btn){ btn.disabled=false; btn.textContent="Reset demo"; }
+      }
+    }
+    document.getElementById("run-btn").onclick = load;
+    document.getElementById("reset-btn").onclick = resetDemo;
+    document.getElementById("live-btn").onclick = runLiveAudit;
+    (async ()=>{ await loadConfig(); await load(); })();
+  </script>
+</body>
+</html>
